@@ -19,13 +19,7 @@ from epysurv.models.timepoint import (
     OutbreakP,
 )
 
-
-def load_predictions(filepath):
-    predictions = pd.read_csv(
-        filepath, index_col=0, parse_dates=True, infer_datetime_format=True
-    )
-    return predictions
-
+from .utils import load_predictions
 
 algos_to_test = [
     EarsC1,
@@ -93,3 +87,20 @@ def test_output_format(train_data, test_data):
     original_test_data = test_data.copy()
     prediction = model.fit(train_data).predict(test_data)
     assert set(test_data.columns) == (set(prediction.columns) - {"alarm"})
+
+
+def test_validate_data_on_fit(train_data):
+    model = EarsC1()
+    with pytest.raises(ValueError):
+        model.fit(train_data.rename(columns={"n_cases": "wrong_column_name"}))
+
+
+@pytest.mark.parametrize("Algo", algos_to_test)
+def test_prediction_witout_labels(train_data, test_data, shared_datadir, Algo):
+    """Test only works with same data as `test_prediction`, because sample data contains no outbreaks in the training set."""
+    model = Algo()
+    with pytest.warns(UserWarning):
+        model.fit(train_data[["n_cases"]])
+    pred = model.predict(test_data)
+    saved_predictions = load_predictions(shared_datadir / f"{Algo.__name__}_pred.csv")
+    assert_frame_equal(pred, saved_predictions)
